@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #
 # -*- coding: utf-8 -*-
 #
@@ -43,14 +42,20 @@ For best CPU speed set the number of intra and inter threads
 to take advantage of multi-core systems.
 See https://github.com/intel/mkl-dnn
 """
-CONFIG = tf.ConfigProto(intra_op_parallelism_threads=args.num_threads,
-                        inter_op_parallelism_threads=args.num_inter_threads)
+#CONFIG = tf.ConfigProto(intra_op_parallelism_threads=args.num_threads,
+#                        inter_op_parallelism_threads=args.num_inter_threads)
 
-SESS = tf.Session(config=CONFIG)
+#SESS = tf.Session(config=CONFIG)
+SESS = tf.Session()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Get rid of the AVX, SSE warnings
 os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
 os.environ["KMP_BLOCKTIME"] = "1"
+
+# If hyperthreading is enabled, then use
 os.environ["KMP_AFFINITY"] = "granularity=thread,compact,1,0"
+
+# If hyperthreading is NOT enabled, then use
+#os.environ["KMP_AFFINITY"] = "granularity=thread,compact"
 
 if args.keras_api:
     import keras as K
@@ -85,6 +90,7 @@ def train_and_predict(data_path, data_filename, batch_size, n_epoch):
         load_data(hdf5_filename, args.batch_size,
                   [args.crop_dim, args.crop_dim],
                   args.channels_first, args.seed)
+
 
     print("-" * 30)
     print("Creating and compiling model ...")
@@ -128,6 +134,14 @@ def train_and_predict(data_path, data_filename, batch_size, n_epoch):
 
     unet_model.evaluate_model(model_filename, imgs_testing, msks_testing)
 
+    """
+    Step 5: Save frozen TensorFlow version of model
+    This can be convert into OpenVINO format with model optimizer.
+    """
+    print("-" * 30)
+    print("Freezing model and saved to a TensorFlow protobuf ...")
+    print("-" * 30)
+    unet_model.save_frozen_model(model_filename, imgs_testing.shape)
 
 if __name__ == "__main__":
 

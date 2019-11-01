@@ -41,23 +41,17 @@
 #   I_MPI_PIN_DOMAIN=socket pins a worker to a socket
 #   -n
 
-
-import horovod.keras as hvd
-
-from dataloader import DataGenerator
-from model import unet
-
-import datetime
-import os
 from argparser import args
-import numpy as np
-
-import tensorflow as tf
-
 if args.keras_api:
     import keras as K
+    import horovod.keras as hvd
 else:
     from tensorflow import keras as K
+    import horovod.tensorflow.keras as hvd
+
+from tensorflow.python.framework import graph_util
+from tensorflow.python.framework import graph_io
+import shutil
 
 CHANNELS_LAST = True
 
@@ -67,6 +61,60 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Get rid of the AVX, SSE warnings
 os.environ["OMP_NUM_THREADS"] = str(args.intraop_threads)
 os.environ["KMP_BLOCKTIME"] = str(args.blocktime)
 os.environ["KMP_AFFINITY"] = "granularity=thread,compact,1,0"
+
+def save_frozen_model(model_filename, input_shape):
+    """
+    Save frozen TensorFlow formatted model protobuf
+    """
+    model = K.models.load_model(model_filename, compile=None)
+
+    # Change filename to protobuf extension
+    base = os.path.basename(model_filename)
+    output_model = os.path.splitext(base)[0] + ".pb"
+
+    # Set Keras to inference
+    K.backend._LEARNING_PHASE = tf.constant(0)
+    K.backend.set_learning_phase(False)
+    K.backend.set_learning_phase(0)
+    K.backend.set_image_data_format("channels_last")
+
+    num_output = len(model.outputs)
+    predictions = [None] * num_output
+    prediction_node_names = [None] * num_output
+
+    for i in range(num_output):
+        prediction_node_names[i] = "output_node" + str(i)
+        predictions[i] = tf.identity(model.outputs[i],
+                name=prediction_node_names[i])
+
+    sess = K.backend.get_session()
+
+    constant_graph = graph_util.convert_variables_to_constants(sess,
+                     sess.graph.as_graph_def(), prediction_node_names)
+    infer_graph = graph_util.remove_training_nodes(constant_graph)
+
+    # Write protobuf of frozen model
+    frozen_dir = "./tf_protobuf/"
+    shutil.rmtree(frozen_dir, ignore_errors=True) # Remove existing directory
+    graph_io.write_graph(infer_graph, frozen_dir, output_model, as_text=False)
+
+    pb_filename = os.path.join(frozen_dir, output_model)
+    print("\n\nFrozen TensorFlow model written to: {}".format(pb_filename))
+    print("Convert this to OpenVINO by running:\n")
+    print("source /opt/intel/openvino/bin/setupvars.sh")
+    print("python $INTEL_OPENVINO_DIR/deployment_tools/model_optimizer/mo_tf.py \\")
+    print("       --input_model {} \\".format(pb_filename))
+
+    shape_string = "[1"
+    for idx in range(len(input_shape[1:])):
+        shape_string += ",{}".format(input_shape[idx+1])
+    shape_string += "]"
+
+    print("       --input_shape {} \\".format(shape_string))
+    print("       --output_dir openvino_models/FP32/ \\")
+    print("       --data_type FP32\n\n")
+
+
 
 if (hvd.rank() == 0):  # Only print on worker 0
     print("Args = {}".format(args))
@@ -87,7 +135,7 @@ if (hvd.rank() == 0):  # Only print on worker 0
 else:  # Don't print on workers > 0
     print_summary = 0
     verbose = 0
-    
+
 
 # Optimize CPU threads for TensorFlow
 CONFIG = tf.ConfigProto(
@@ -98,7 +146,6 @@ SESS = tf.Session(config=CONFIG)
 
 K.backend.set_session(SESS)
 
-CHANNEL_LAST = True
 unet_model = unet(use_upsampling=args.use_upsampling,
                   learning_rate=args.lr,
                   n_cl_in=args.number_input_channels,
@@ -110,9 +157,14 @@ unet_model = unet(use_upsampling=args.use_upsampling,
 
 opt = hvd.DistributedOptimizer(unet_model.optimizer)
 
-unet_model.model.compile(optimizer=opt,
-              loss=unet_model.loss,
-              metrics=unet_model.metrics)
+if args.keras_api:
+    unet_model.model.compile(optimizer=opt,
+                  loss=unet_model.loss,
+                  metrics=unet_model.metrics)
+else:
+    unet_model.compile(optimizer=opt,
+                  loss=unet_model.loss,
+                  metrics=unet_model.metrics)
 
 if hvd.rank() == 0:
     start_time = datetime.datetime.now()
@@ -221,7 +273,6 @@ unet_model.model.fit_generator(training_generator,
                     max_queue_size=args.num_prefetched_batches,
                     workers=args.num_data_loaders,
                     use_multiprocessing=False)
-
 if hvd.rank() == 0:
 
     """
@@ -230,6 +281,10 @@ if hvd.rank() == 0:
     testing_generator = DataGenerator("test", args.data_path,
                                       **validation_data_params)
     testing_generator.print_info()
+
+    # Load the best model
+    print("Loading the best model: {}".format(args.saved_model))
+    unet_model.model.load_weights(args.saved_model)
 
     m = unet_model.model.evaluate_generator(testing_generator, verbose=1,
                                  max_queue_size=args.num_prefetched_batches,
@@ -241,6 +296,11 @@ if hvd.rank() == 0:
     for idx, name in enumerate(unet_model.model.metrics_names):
         print("{} = {:.4f}".format(name, m[idx]))
 
+    # Save a frozen version of the model for use in OpenVINO
+    save_frozen_model(args.saved_model,
+                     [1, args.patch_height, args.patch_width, args.patch_depth,
+                     args.number_input_channels])
+
     print("\n\n")
 
     stop_time = datetime.datetime.now()
@@ -248,4 +308,3 @@ if hvd.rank() == 0:
     print("Stopped script on {}".format(stop_time))
     print("\nTotal time = {}".format(
         stop_time - start_time))
-

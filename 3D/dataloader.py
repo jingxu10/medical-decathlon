@@ -23,7 +23,6 @@ import json
 import ntpath
 import os
 import numpy as np
-import tensorflow as tf
 from argparser import args
 
 TRAIN_TESTVAL_SEED = 816
@@ -181,10 +180,43 @@ class DataGenerator(K.utils.Sequence):
         testIdx = idxList[-test_len:]  # List of testing indices (last testIdx elements)
 
         if self.setType == "train":
+
+            with open("train.csv", "w") as writeFile:
+                fileList = {}
+                for idx in trainIdx:
+                    fileList[self.imgFiles[idx]] = self.mskFiles[idx]
+
+                for img in sorted(fileList):
+                    writeFile.write("{},{}\n".format(img, fileList[img]))
+
+            writeFile.close()
+
             return trainIdx
         elif self.setType == "validate":
+
+            with open("validate.csv", "w") as writeFile:
+                fileList = {}
+                for idx in validateIdx:
+                    fileList[self.imgFiles[idx]] = self.mskFiles[idx]
+
+                for img in sorted(fileList):
+                    writeFile.write("{},{}\n".format(img, fileList[img]))
+
+            writeFile.close()
+
             return validateIdx
         elif self.setType == "test":
+
+            with open("test.csv", "w") as writeFile:
+                fileList = {}
+                for idx in testIdx:
+                    fileList[self.imgFiles[idx]] = self.mskFiles[idx]
+
+                for img in sorted(fileList):
+                    writeFile.write("{},{}\n".format(img, fileList[img]))
+
+            writeFile.close()
+
             return testIdx
         else:
             print("Error. You forgot to specify train, test, or validate. Instead received {}".format(self.setType))
@@ -217,22 +249,6 @@ class DataGenerator(K.utils.Sequence):
         Public method to get one batch of data
         """
         return self.__getitem__(index)
-
-    def get_batch_fileIDs(self, index):
-        """
-        Get the original filenames for the batch at this index
-        """
-        indexes = np.sort(
-            self.indexes[index*self.batch_size:(index+1)*self.batch_size])
-        fileIDs = {}
-
-        for idx, fileIdx in enumerate(indexes):
-            name = self.imgFiles[fileIdx]
-            filename = ntpath.basename(name)  # Strip all but filename
-            filename = os.path.splitext(filename)[0]
-            fileIDs[idx] = os.path.splitext(filename)[0]
-
-        return fileIDs
 
     def on_epoch_end(self):
         """
@@ -318,6 +334,12 @@ class DataGenerator(K.utils.Sequence):
 
         return img
 
+    def get_batch_fileIDs(self):
+        """
+        Get the file IDs of the last batch that was loaded.
+        """
+        return self.fileIDs
+
     def __data_generation(self, list_IDs_temp):
         """
         Generates data containing batch_size samples
@@ -330,9 +352,15 @@ class DataGenerator(K.utils.Sequence):
         imgs = np.zeros((self.batch_size, *self.dim, self.n_in_channels))
         msks = np.zeros((self.batch_size, *self.dim, self.n_out_channels))
 
+        self.fileIDs = {}
+
         for idx, fileIdx in enumerate(list_IDs_temp):
 
             img_temp = np.array(nib.load(self.imgFiles[fileIdx]).dataobj)
+
+            filename = ntpath.basename(self.imgFiles[fileIdx])  # Strip all but filename
+            filename = os.path.splitext(filename)[0]
+            self.fileIDs[idx] = os.path.splitext(filename)[0]
 
             """
             "modality": {

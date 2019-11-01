@@ -18,28 +18,30 @@
 # SPDX-License-Identifier: EPL-2.0
 #
 
-import shutil
-from tensorflow.contrib.session_bundle import exporter
-import keras as K
 import tensorflow as tf
 from model import unet
-
 import os
 import argparse
+from argparser import args
+if args.keras_api:
+    import keras as K
+else:
+    from tensorflow import keras as K
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_filename",
                     help="Name of saved Keras model (e.g. model.h5)",
                     default=os.path.join("saved_model", "3d_unet_decathlon.hdf5"))
 parser.add_argument("--output_directory",
-                    help="Directory where to save the TensorFlow Serving Protobuf Model",
-                    default="saved_3dunet_model_protobuf")
+                    help="Directory where to save the TensorFlow Checkpoint",
+                    default="saved_3dunet_model_checkpoint")
 
 args = parser.parse_args()
 
 sess = K.backend.get_session()
 
 print("Loading saved Keras model.")
+
 
 """
 If there are other custom loss and metric functions you'll need to specify them
@@ -48,23 +50,17 @@ and add them to the dictionary below.
 unet_model = unet(channels_last = True)  # channels first or last
 model = K.models.load_model(args.input_filename, custom_objects=unet_model.custom_objects)
 
-print("Freezing the graph.")
-K.backend.set_learning_phase(0)
-
-signature = tf.saved_model.signature_def_utils.predict_signature_def(
-    inputs={'input': model.input}, outputs={'output': model.output})
-
-shutil.rmtree(args.output_directory, ignore_errors=True)
 
 print("Saving the model to directory {}".format(args.output_directory))
 
-builder = tf.saved_model.builder.SavedModelBuilder(args.output_directory)
-builder.add_meta_graph_and_variables(
-    sess=sess,
-    tags=[tf.saved_model.tag_constants.SERVING],
-    signature_def_map={
-        tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY:
-            signature
-    })
-builder.save()
-print("TensorFlow protobuf version of model is saved.")
+saver = tf.train.Saver()
+
+# Create directory if it doesn't exist
+try:
+    os.stat(args.output_directory)
+except:
+    os.mkdir(args.output_directory)
+
+save_path = saver.save(sess, os.path.join(
+    args.output_directory, "unet_model.ckpt"))
+print("Checkpoint saved in path: {}".format(save_path))
