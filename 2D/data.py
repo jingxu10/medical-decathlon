@@ -258,7 +258,7 @@ def load_data(hdf5_data_filename, batch_size=128, crop_dim=[-1, -1],
                                         seed=seed,
                                         channels_first=channels_first)
 
-    print("Batch size = {}".format(batch_size))
+    # print("Batch size = {}".format(batch_size))
 
     print("Training image dimensions:   {}".format(imgs_train.shape))
     print("Training mask dimensions:    {}".format(msks_train.shape))

@@ -134,10 +134,10 @@ args = parser.parse_args()
 
 # os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # Get rid of the AVX, SSE warnings
 
-os.environ["KMP_BLOCKTIME"] = str(args.blocktime)
+# os.environ["KMP_BLOCKTIME"] = str(args.blocktime)
 # os.environ["KMP_AFFINITY"] = "granularity=fine,compact,1,0"
 
-os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
-os.environ["INTRA_THREADS"] = str(args.num_threads)
-os.environ["INTER_THREADS"] = str(args.num_inter_threads)
-os.environ["KMP_SETTINGS"] = "0"  # Show the settings at runtime
+# os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
+# os.environ["INTRA_THREADS"] = str(args.num_threads)
+# os.environ["INTER_THREADS"] = str(args.num_inter_threads)
+# os.environ["KMP_SETTINGS"] = "0"  # Show the settings at runtime
