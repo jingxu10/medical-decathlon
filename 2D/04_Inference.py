@@ -14,6 +14,18 @@ from model import unet
 
 from argparser import args
 
+intra=0
+inter=0
+if 'intra_op_parallelism_threads' in os.environ:
+    intra = int(os.environ['intra_op_parallelism_threads'])
+if 'inter_op_parallelism_threads' in os.environ:
+    inter = int(os.environ['inter_op_parallelism_threads'])
+if intra != 0 and inter != 0:
+    config = tf.ConfigProto(intra_op_parallelism_threads=intra,
+            inter_op_parallelism_threads=inter)
+    session = tf.Session(config=config)
+    K.backend.set_session(session)
+
 print ("We are using Tensorflow version", tf.__version__, "with Intel(R) oneDNN", "enabled" if tf.pywrap_tensorflow.IsMklEnabled() else "disabled",)
 
 data_path = os.path.join("../../data/decathlon/144x144/")
