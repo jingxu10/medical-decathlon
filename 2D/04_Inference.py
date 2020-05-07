@@ -44,9 +44,9 @@ def do_benchmark(batch_size=32):
     t0 = time.time()
     model.predict(imgs_infere, batch_size, verbose=1, steps=None)
     t1 = time.time()
-    lat=(t1-t0)/imgs_infere.shape[0]
-    thr=1/lat
-    print('Latency: {}ms; Throughput: {}fps'.format(lat*1000, thr*batch_size))
+    lat=t1-t0
+    thr=batch_size/lat
+    print('Latency: {:.2f}ms; Throughput: {:.2f}fps'.format(lat*1000, thr))
 
 print('batch size: {}'.format(args.batch_size))
 do_benchmark(args.batch_size)
