@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# default configuration
-# KMP_BLOCKTIME=0 w/o numactl
-# KMP_BLOCKTIME=0 w numactl
+# default configuration w/o numactl
 # KMP_BLOCKTIME=1 w/o numactl
+# default configuration w numactl
 # KMP_BLOCKTIME=1 w numactl
+# KMP_BLOCKTIME=1 w numactl 2 instances
+# KMP_BLOCKTIME=1 w numactl 4 instances
 
 if [[ $# -ge 1 ]] && [[ $1 == 'opt' ]]; then
     echo "Set environment variables"
